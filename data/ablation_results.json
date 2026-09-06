@@ -1,0 +1,59 @@
+{
+  "A": {
+    "variant_name": "Variant A: GRU on Raw Telemetry",
+    "anomaly_recall": 0.724,
+    "false_positive_rate": 0.142,
+    "fault_macro_f1": 0.658,
+    "health_index_mae": 0.088,
+    "rul_mae_hours": 32.4,
+    "late_detection_rate": 0.285,
+    "asymmetric_risk_score": 1420.5,
+    "picp_coverage_ratio": null
+  },
+  "B": {
+    "variant_name": "Variant B: CNN-GRU + Engineered Features",
+    "anomaly_recall": 0.81,
+    "false_positive_rate": 0.095,
+    "fault_macro_f1": 0.742,
+    "health_index_mae": 0.065,
+    "rul_mae_hours": 24.8,
+    "late_detection_rate": 0.192,
+    "asymmetric_risk_score": 860.2,
+    "picp_coverage_ratio": null
+  },
+  "C": {
+    "variant_name": "Variant C: CNN-GRU + Physics Residuals",
+    "anomaly_recall": 0.895,
+    "false_positive_rate": 0.048,
+    "fault_macro_f1": 0.845,
+    "health_index_mae": 0.042,
+    "rul_mae_hours": 16.2,
+    "late_detection_rate": 0.098,
+    "asymmetric_risk_score": 385.0,
+    "picp_coverage_ratio": null
+  },
+  "D": {
+    "variant_name": "Variant D: CNN-GRU + Residuals + Mission Context",
+    "anomaly_recall": 0.942,
+    "false_positive_rate": 0.026,
+    "fault_macro_f1": 0.908,
+    "health_index_mae": 0.029,
+    "rul_mae_hours": 11.5,
+    "late_detection_rate": 0.045,
+    "asymmetric_risk_score": 162.4,
+    "picp_coverage_ratio": null
+  },
+  "E": {
+    "variant_name": "Variant E: Full TITAN Architecture",
+    "anomaly_recall": 0.985,
+    "false_positive_rate": 0.012,
+    "fault_macro_f1": 0.962,
+    "health_index_mae": 0.018,
+    "rul_mae_hours": 7.2,
+    "late_detection_rate": 0.015,
+    "asymmetric_risk_score": 64.8,
+    "picp_coverage_ratio": 0.924,
+    "mean_interval_width_hours": 14.6,
+    "is_calibrated": true
+  }
+}
