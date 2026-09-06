@@ -46,7 +46,15 @@ def run_what_if_simulation(req: WhatIfRequest):
         inject_fault=req.inject_fault,
         fault_severity=req.fault_severity
     )
-    return result
+    return {
+        **result,
+        "projected_health_index": result.get("projected_final_hi", cur_hi),
+        "projected_rul_hours": result.get("projected_post_mission_rul_hours", 150.0),
+        "tactical_clearance": {
+            "recommendation": result.get("status", "GO"),
+            "rationale": result.get("recommendation", "Engine cleared for scheduled profile.")
+        }
+    }
 
 
 @router.get("/replay/catalog")

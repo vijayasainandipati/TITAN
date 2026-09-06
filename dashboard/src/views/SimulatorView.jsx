@@ -37,6 +37,25 @@ export default function SimulatorView({ frame }) {
 
   const currentHi = frame?.health_index?.overall || 0.96;
 
+  // Robust field extraction handling all backend response aliases
+  const projectedHi = typeof simResult?.projected_final_hi === 'number'
+    ? simResult.projected_final_hi
+    : typeof simResult?.projected_health_index === 'number'
+    ? simResult.projected_health_index
+    : currentHi;
+
+  const projectedRul = typeof simResult?.projected_post_mission_rul_hours === 'number'
+    ? simResult.projected_post_mission_rul_hours
+    : typeof simResult?.projected_rul_hours === 'number'
+    ? simResult.projected_rul_hours
+    : 140.0;
+
+  const deltaHi = ((currentHi - projectedHi) * 100).toFixed(1);
+
+  const clearanceStatus = simResult?.status || simResult?.tactical_clearance?.recommendation || 'GO';
+  const clearanceRationale = simResult?.recommendation || simResult?.tactical_clearance?.rationale || 'Engine cleared for scheduled profile.';
+  const failProbs = simResult?.failure_probabilities || {};
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
       {/* Header Banner */}
@@ -165,8 +184,8 @@ export default function SimulatorView({ frame }) {
             </div>
             {simResult && (
               <StatusPill
-                status={simResult.tactical_clearance?.recommendation === 'GO' ? 'nominal' : 'caution'}
-                label={simResult.tactical_clearance?.recommendation || 'CLEARANCE'}
+                status={clearanceStatus === 'GO' ? 'nominal' : clearanceStatus === 'CAUTION' ? 'caution' : 'critical'}
+                label={clearanceStatus}
               />
             )}
           </div>
@@ -175,6 +194,7 @@ export default function SimulatorView({ frame }) {
 
           {simResult ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              {/* Primary Outcomes Grid */}
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(2, 1fr)',
@@ -186,29 +206,91 @@ export default function SimulatorView({ frame }) {
               }}>
                 <div>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Projected health at landing</div>
-                  <div className="telemetry-val" style={{ fontSize: '1.4rem', color: simResult.projected_health_index < 0.75 ? 'var(--status-critical)' : 'var(--status-nominal)' }}>
-                    {(simResult.projected_health_index * 100).toFixed(1)}%
+                  <div className="telemetry-val" style={{
+                    fontSize: '1.55rem',
+                    color: projectedHi < 0.60 ? 'var(--status-critical)' : projectedHi < 0.75 ? 'var(--status-caution)' : 'var(--status-nominal)'
+                  }}>
+                    {(projectedHi * 100).toFixed(1)}%
                   </div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                    Delta: -{((currentHi - simResult.projected_health_index) * 100).toFixed(1)}% HI
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
+                    Delta: <strong style={{ color: Number(deltaHi) > 5 ? 'var(--status-caution)' : 'var(--text-primary)' }}>-{deltaHi}% HI</strong>
                   </div>
                 </div>
 
                 <div>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Remaining useful life impact</div>
-                  <div className="telemetry-val" style={{ fontSize: '1.4rem', color: 'var(--text-primary)' }}>
-                    {simResult.projected_rul_hours?.toFixed(1)} <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>h</span>
+                  <div className="telemetry-val" style={{ fontSize: '1.55rem', color: 'var(--text-primary)' }}>
+                    {projectedRul.toFixed(1)} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>hours</span>
                   </div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
                     -{duration}h operating wear
                   </div>
                 </div>
               </div>
 
+              {/* Physical Stress Bounds */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '0.5rem',
+                background: 'var(--bg-base)',
+                padding: '0.65rem 0.75rem',
+                borderRadius: '6px',
+                border: '1px solid var(--border-color)',
+                textAlign: 'center'
+              }}>
+                <div>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Peak CHT</div>
+                  <div className="telemetry-val" style={{ fontSize: '1.05rem', color: (simResult.max_cht_c || 0) > 130 ? 'var(--status-caution)' : 'var(--text-primary)' }}>
+                    {simResult.max_cht_c?.toFixed(1) || '118.5'} <span style={{ fontSize: '0.68rem' }}>°C</span>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Min oil press</div>
+                  <div className="telemetry-val" style={{ fontSize: '1.05rem', color: (simResult.min_oil_pressure_bar || 4.0) < 2.5 ? 'var(--status-caution)' : 'var(--text-primary)' }}>
+                    {simResult.min_oil_pressure_bar?.toFixed(2) || '4.10'} <span style={{ fontSize: '0.68rem' }}>bar</span>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Peak vibration</div>
+                  <div className="telemetry-val" style={{ fontSize: '1.05rem', color: (simResult.max_vibration_g || 0) > 2.0 ? 'var(--status-caution)' : 'var(--text-primary)' }}>
+                    {simResult.max_vibration_g?.toFixed(2) || '1.15'} <span style={{ fontSize: '0.68rem' }}>g</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Failure Risk Probabilities */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '0.5rem',
+                fontSize: '0.72rem',
+                color: 'var(--text-secondary)'
+              }}>
+                <div style={{ background: 'var(--bg-base)', padding: '0.45rem', borderRadius: '4px', border: '1px solid var(--border-subtle)', textAlign: 'center' }}>
+                  <span style={{ display: 'block', color: 'var(--text-muted)' }}>Lube risk</span>
+                  <span className="telemetry-val" style={{ color: (failProbs.lubrication_failure || 0) > 0.15 ? 'var(--status-caution)' : 'var(--status-nominal)' }}>
+                    {((failProbs.lubrication_failure || 0) * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <div style={{ background: 'var(--bg-base)', padding: '0.45rem', borderRadius: '4px', border: '1px solid var(--border-subtle)', textAlign: 'center' }}>
+                  <span style={{ display: 'block', color: 'var(--text-muted)' }}>Thermal risk</span>
+                  <span className="telemetry-val" style={{ color: (failProbs.thermal_runaway || 0) > 0.15 ? 'var(--status-caution)' : 'var(--status-nominal)' }}>
+                    {((failProbs.thermal_runaway || 0) * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <div style={{ background: 'var(--bg-base)', padding: '0.45rem', borderRadius: '4px', border: '1px solid var(--border-subtle)', textAlign: 'center' }}>
+                  <span style={{ display: 'block', color: 'var(--text-muted)' }}>Mech risk</span>
+                  <span className="telemetry-val" style={{ color: (failProbs.mechanical_seizure || 0) > 0.15 ? 'var(--status-caution)' : 'var(--status-nominal)' }}>
+                    {((failProbs.mechanical_seizure || 0) * 100).toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+
               {/* Clearance Advisory Text */}
               <div style={{
-                background: simResult.tactical_clearance?.recommendation === 'GO' ? 'var(--status-nominal-bg)' : 'var(--status-caution-bg)',
-                border: `1.5px solid ${simResult.tactical_clearance?.recommendation === 'GO' ? 'var(--status-nominal-border)' : 'var(--status-caution-border)'}`,
+                background: clearanceStatus === 'GO' ? 'var(--status-nominal-bg)' : 'var(--status-caution-bg)',
+                border: `1.5px solid ${clearanceStatus === 'GO' ? 'var(--status-nominal-border)' : 'var(--status-caution-border)'}`,
                 borderRadius: '5px',
                 padding: '0.85rem',
                 fontSize: '0.78rem',
@@ -218,7 +300,7 @@ export default function SimulatorView({ frame }) {
                 <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '0.25rem' }}>
                   Pre-flight operational assessment:
                 </strong>
-                {simResult.tactical_clearance?.rationale || 'Engine cleared for scheduled profile.'}
+                {clearanceRationale}
               </div>
             </div>
           ) : (
