@@ -30,15 +30,23 @@ class WhatIfRequest(BaseModel):
 @router.post("/what_if")
 def run_what_if_simulation(req: WhatIfRequest):
     """
-    Executes a pre-mission what-if simulation forward in time.
+    Executes a pre-mission what-if simulation forward in time using the engine's
+    actual current Digital Twin state (health, residuals, degradation trajectory).
     """
     sess = fleet_stream_manager.sessions.get(req.engine_id or fleet_stream_manager.active_engine_id)
     cur_hi = sess.health_calc.hi_engine if sess else 0.95
     sub_hi = sess.health_calc.hi_subsystems if sess else None
+    cur_frame = sess.current_frame if sess else None
+    cur_residuals = cur_frame.get("residuals") if cur_frame else None
+    cur_deg_state = sess.deg_mgr.get_degradation_state() if sess else None
+    wear_mult = sess.engine.wear_rate_multiplier if sess else 1.0
     
     result = simulator.run_simulation(
         current_hi=cur_hi,
         current_subsystems=sub_hi,
+        current_residuals=cur_residuals,
+        current_deg_state=cur_deg_state,
+        wear_multiplier=wear_mult,
         mission_profile_name=req.mission_profile,
         planned_duration_hours=req.duration_hours,
         ambient_temp_offset_c=req.ambient_temp_offset_c,
@@ -52,7 +60,8 @@ def run_what_if_simulation(req: WhatIfRequest):
         "projected_rul_hours": result.get("projected_post_mission_rul_hours", 150.0),
         "tactical_clearance": {
             "recommendation": result.get("status", "GO"),
-            "rationale": result.get("recommendation", "Engine cleared for scheduled profile.")
+            "rationale": result.get("recommendation", "Engine cleared for scheduled profile."),
+            "firing_rule": result.get("firing_rule", "NOMINAL_CLEARANCE")
         }
     }
 

@@ -54,7 +54,14 @@ export default function SimulatorView({ frame }) {
 
   const clearanceStatus = simResult?.status || simResult?.tactical_clearance?.recommendation || 'GO';
   const clearanceRationale = simResult?.recommendation || simResult?.tactical_clearance?.rationale || 'Engine cleared for scheduled profile.';
+  const firingRule = simResult?.firing_rule || simResult?.tactical_clearance?.firing_rule;
+  const ensembleRuns = simResult?.ensemble_stats?.ensemble_runs || 25;
   const failProbs = simResult?.failure_probabilities || {};
+
+  const isNoGo = clearanceStatus === 'NO_GO';
+  const isCaution = clearanceStatus === 'CAUTION';
+  const assessBg = isNoGo ? 'var(--status-critical-bg)' : isCaution ? 'var(--status-caution-bg)' : 'var(--status-nominal-bg)';
+  const assessBorder = isNoGo ? 'var(--status-critical-border)' : isCaution ? 'var(--status-caution-border)' : 'var(--status-nominal-border)';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
@@ -287,20 +294,38 @@ export default function SimulatorView({ frame }) {
                 </div>
               </div>
 
-              {/* Clearance Advisory Text */}
+              {/* Clearance Advisory Box */}
               <div style={{
-                background: clearanceStatus === 'GO' ? 'var(--status-nominal-bg)' : 'var(--status-caution-bg)',
-                border: `1.5px solid ${clearanceStatus === 'GO' ? 'var(--status-nominal-border)' : 'var(--status-caution-border)'}`,
+                background: assessBg,
+                border: `1.5px solid ${assessBorder}`,
                 borderRadius: '5px',
                 padding: '0.85rem',
                 fontSize: '0.78rem',
                 color: 'var(--text-secondary)',
                 lineHeight: 1.45
               }}>
-                <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '0.25rem' }}>
-                  Pre-flight operational assessment:
-                </strong>
-                {clearanceRationale}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  <strong style={{ color: 'var(--text-primary)', display: 'block' }}>
+                    Pre-flight operational assessment:
+                  </strong>
+                  {firingRule && (
+                    <span style={{
+                      fontSize: '0.65rem',
+                      fontFamily: 'var(--font-mono)',
+                      fontWeight: 600,
+                      padding: '0.15rem 0.45rem',
+                      borderRadius: '3px',
+                      background: isNoGo ? 'var(--status-critical)' : isCaution ? 'var(--status-caution)' : 'var(--status-nominal)',
+                      color: '#FFFFFF'
+                    }}>
+                      {firingRule.replace(/_/g, ' ')}
+                    </span>
+                  )}
+                </div>
+                <div>{clearanceRationale}</div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.4rem', borderTop: '1px dashed var(--border-subtle)', paddingTop: '0.3rem' }}>
+                  Fast-time Monte Carlo: {ensembleRuns} forward trajectories sampled across physics parameter uncertainty.
+                </div>
               </div>
             </div>
           ) : (
