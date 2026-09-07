@@ -194,6 +194,8 @@ class EngineStreamSession:
         # Construct composite frame
         self.current_frame = {
             "timestamp": round(self.sim_time, 1),
+            "real_time": time.strftime("%H:%M:%S"),
+            "real_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "engine_id": self.engine.engine_id,
             "engine_name": self.engine.name,
             "flight_phase": cond["phase"],

@@ -3,6 +3,7 @@ TITAN API — Mission Intelligence & Replay Endpoints
 """
 
 import os
+import time
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from typing import Dict, List, Optional
@@ -62,15 +63,12 @@ def run_what_if_simulation(req: WhatIfRequest):
         cur_deg_state = dict(sess.deg_mgr.get_degradation_state()) if sess else None
         wear_mult = sess.engine.wear_rate_multiplier if sess else 1.0
 
-        # Calculate twin state snapshot timestamp for operator traceability
-        sim_time_sec = cur_frame.get("timestamp", 0.0) if cur_frame else (sess.sim_time if sess else 0.0)
-        hours = int(sim_time_sec // 3600)
-        minutes = int((sim_time_sec % 3600) // 60)
-        seconds = int(sim_time_sec % 60)
-        snapshot_timestamp = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        # Real-time wall-clock timestamp for operator traceability (HH:MM:SS)
+        snapshot_timestamp = time.strftime("%H:%M:%S")
 
-        # Deterministic snapshot ID based on engine and exact current degradation state
-        snapshot_id = req.snapshot_id or f"{engine_id}-T{int(sim_time_sec)}-HI{round(cur_hi, 3)}"
+        # Deterministic snapshot ID based on engine, real-time clock, and degradation state
+        sim_time_sec = cur_frame.get("timestamp", 0.0) if cur_frame else (sess.sim_time if sess else 0.0)
+        snapshot_id = req.snapshot_id or f"{engine_id}-{snapshot_timestamp.replace(':', '')}-HI{round(cur_hi, 3)}"
 
         # Freeze snapshot in cache
         twin_snapshots[snapshot_id] = {

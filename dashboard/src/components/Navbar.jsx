@@ -23,6 +23,22 @@ export default function Navbar({
     { id: 'fleet', label: 'Fleet (swarm)' }
   ];
 
+  // Live real-time station clock (HH:MM:SS) updating continuously every second
+  const [realTime, setRealTime] = React.useState(() => {
+    const now = new Date();
+    return now.toLocaleTimeString('en-GB', { hour12: false });
+  });
+
+  React.useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setRealTime(now.toLocaleTimeString('en-GB', { hour12: false }));
+    };
+    updateTime();
+    const timer = setInterval(updateTime, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Format mission clock in monospace HH:MM:SS
   const formatClock = (seconds) => {
     const s = Math.floor(seconds || 0);
@@ -89,7 +105,7 @@ export default function Navbar({
           ))}
         </select>
 
-        {/* Mission Clock in Monospace */}
+        {/* Real-Time Master Station Clock & Mission Elapsed Time in Monospace */}
         <div style={{
           background: 'var(--bg-base)',
           padding: '0.35rem 0.65rem',
@@ -97,10 +113,26 @@ export default function Navbar({
           border: '1px solid var(--border-color)',
           display: 'flex',
           alignItems: 'center',
-          gap: '0.45rem'
-        }}>
-          <div className="stream-dot" />
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-primary)', fontWeight: 600 }}>
+          gap: '0.5rem'
+        }} title="Real-time master station clock & mission elapsed time">
+          <div className="stream-dot" title="Live stream telemetry active" />
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.80rem',
+            color: 'var(--text-primary)',
+            fontWeight: 700,
+            letterSpacing: '0.02em'
+          }}>
+            {realTime}
+          </span>
+          <span style={{
+            fontSize: '0.68rem',
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--text-muted)',
+            borderLeft: '1px solid var(--border-color)',
+            paddingLeft: '0.5rem',
+            fontWeight: 500
+          }}>
             {formatClock(simTime)}
           </span>
         </div>

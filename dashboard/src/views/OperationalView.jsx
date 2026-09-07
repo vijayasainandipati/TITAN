@@ -72,7 +72,25 @@ export default function OperationalView({ frame, onOpenFaultModal, onNavigateVie
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+            {/* Real-time Telemetry Frame Timestamp */}
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              fontSize: '0.78rem',
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--text-secondary)',
+              background: 'var(--bg-base)',
+              padding: '0.25rem 0.55rem',
+              borderRadius: '4px',
+              border: '1px solid var(--border-color)'
+            }} title="Real-time telemetry stream timestamp">
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--accent-green)' }} />
+              <span style={{ fontWeight: 600 }}>{frame?.real_time || new Date().toLocaleTimeString('en-GB', { hour12: false })}</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.66rem' }}>LIVE</span>
+            </div>
+
             {/* Status dot + text indicator matching mockup */}
             <div style={{
               display: 'inline-flex',
