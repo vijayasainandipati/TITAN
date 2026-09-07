@@ -94,3 +94,37 @@ def test_what_if_simulator_rule4_ood_envelope():
     assert res["status"] == "NO_GO"
     assert res["firing_rule"] == "RULE_4_OOD_ENVELOPE"
     assert "validated" in res["recommendation"].lower() or "envelope" in res["recommendation"].lower()
+
+
+def test_what_if_simulator_deterministic_reproducibility():
+    """
+    Verify PRD Section I.5 requirement:
+    Identical inputs against the same twin state snapshot produce 100% bit-exact outputs.
+    """
+    sim = WhatIfMissionSimulator(ensemble_size=20)
+    config = {
+        "current_hi": 0.92,
+        "current_subsystems": {"thermal": 0.91, "lubrication": 0.93, "mechanical": 0.94, "combustion": 0.90},
+        "engine_id": "ENG-MALE-01",
+        "twin_snapshot_id": "ENG-MALE-01-T500-HI0.920",
+        "twin_snapshot_timestamp": "00:08:20",
+        "mission_profile_name": "endurance",
+        "planned_duration_hours": 18.5,
+        "ambient_temp_offset_c": 0.0,
+        "altitude_ceiling_ft": 18000.0
+    }
+
+    run1 = sim.run_simulation(**config)
+    run2 = sim.run_simulation(**config)
+
+    assert run1["deterministic_seed"] == run2["deterministic_seed"]
+    assert run1["snapshot_id"] == run2["snapshot_id"]
+    assert run1["snapshot_timestamp"] == run2["snapshot_timestamp"]
+    assert run1["projected_final_hi"] == run2["projected_final_hi"]
+    assert run1["projected_post_mission_rul_hours"] == run2["projected_post_mission_rul_hours"]
+    assert run1["min_oil_pressure_bar"] == run2["min_oil_pressure_bar"]
+    assert run1["max_cht_c"] == run2["max_cht_c"]
+    assert run1["max_vibration_g"] == run2["max_vibration_g"]
+    assert run1["failure_probabilities"] == run2["failure_probabilities"]
+    assert run1["tactical_clearance"] == run2["tactical_clearance"]
+

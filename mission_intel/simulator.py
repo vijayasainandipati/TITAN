@@ -18,6 +18,7 @@ Implements the 7-step pipeline:
 7. Traceable, rule-specific advisory generation explaining which physical parameter fired
 """
 
+import hashlib
 import numpy as np
 from typing import Dict, List, Optional, Tuple
 
@@ -28,7 +29,7 @@ from sim.physics_models.mechanical import MechanicalPhysicsModel
 
 
 # =====================================================================
-# NAMED CONFIGURATION CONSTANTS (PRD Part I.3)
+# NAMED CONFIGURATION CONSTANTS (PRD Part I.3 & I.5)
 # Tunable per engine type or mission-criticality class without changing logic
 # =====================================================================
 SUBSYSTEM_RISK_CRITICAL: float = 0.25      # 25% failure probability threshold for NO_GO
@@ -45,6 +46,28 @@ OOD_TEMP_OFFSET_MIN: float = -15.0         # °C (validated training envelope mi
 MONTE_CARLO_ENSEMBLE_SIZE: int = 25        # N sampled ensemble forward projections
 
 
+def derive_deterministic_seed(engine_id: str = "ENG-MALE-01",
+                             snapshot_id: str = "0",
+                             mission_profile: str = "endurance",
+                             duration_hours: float = 12.0,
+                             ambient_offset_c: float = 0.0,
+                             altitude_ceiling_ft: float = 18000.0,
+                             inject_fault: Optional[str] = None,
+                             fault_severity: float = 0.0) -> int:
+    """
+    Derives deterministic ensemble random seed per Section I.5.
+    seed = hash(engine_id, current_twin_state_snapshot_id, mission_profile,
+                sortie_duration, ambient_offset, operating_ceiling)
+    """
+    key_str = (
+        f"{engine_id}|{snapshot_id}|{mission_profile}|"
+        f"{round(float(duration_hours), 2)}|{round(float(ambient_offset_c), 1)}|"
+        f"{round(float(altitude_ceiling_ft), 0)}|{inject_fault}|{round(float(fault_severity), 2)}"
+    )
+    digest = hashlib.sha256(key_str.encode("utf-8")).hexdigest()
+    return int(digest[:8], 16) & 0x7FFFFFFF
+
+
 class WhatIfMissionSimulator:
     def __init__(self, ensemble_size: int = MONTE_CARLO_ENSEMBLE_SIZE):
         self.ensemble_size = ensemble_size
@@ -55,6 +78,9 @@ class WhatIfMissionSimulator:
                        current_residuals: Optional[Dict[str, float]] = None,
                        current_deg_state: Optional[Dict[str, float]] = None,
                        wear_multiplier: float = 1.0,
+                       engine_id: str = "ENG-MALE-01",
+                       twin_snapshot_id: Optional[str] = None,
+                       twin_snapshot_timestamp: Optional[str] = None,
                        mission_profile_name: str = "endurance",
                        planned_duration_hours: float = 12.0,
                        ambient_temp_offset_c: float = 0.0,
@@ -146,10 +172,20 @@ class WhatIfMissionSimulator:
         thermal_breach_count = 0
         mech_breach_count = 0
         
+        # Section I.5: Deterministic ensemble random seed derived from inputs & twin snapshot
+        effective_snapshot_id = twin_snapshot_id or f"{engine_id}_HI{round(current_hi, 4)}"
+        deterministic_seed = derive_deterministic_seed(
+            engine_id=engine_id,
+            snapshot_id=effective_snapshot_id,
+            mission_profile=mission_profile_name,
+            duration_hours=planned_duration_hours,
+            ambient_offset_c=ambient_temp_offset_c,
+            altitude_ceiling_ft=altitude_ceiling_ft,
+            inject_fault=inject_fault,
+            fault_severity=fault_severity
+        )
+        rng = np.random.RandomState(deterministic_seed)
         median_trajectory = []
-        
-        # Monte Carlo seed control for deterministic reproducibility with physical jitter
-        rng = np.random.RandomState(42)
 
         for run_idx in range(N):
             # Sample model parameter jitter (reusing confidence / uncertainty layer C.3)
@@ -411,6 +447,9 @@ class WhatIfMissionSimulator:
             "status": status,
             "recommendation": recommendation,
             "firing_rule": firing_rule,
+            "snapshot_timestamp": twin_snapshot_timestamp or "00:00:00",
+            "snapshot_id": effective_snapshot_id,
+            "deterministic_seed": deterministic_seed,
             "initial_hi": round(current_hi, 3),
             "projected_final_hi": round(projected_final_hi, 3),
             "projected_health_index": round(projected_final_hi, 3),

@@ -19,6 +19,7 @@ replay_engine = MissionReplayEngine(data_dir="data/synthetic")
 
 class WhatIfRequest(BaseModel):
     engine_id: Optional[str] = "ENG-MALE-01"
+    snapshot_id: Optional[str] = None
     mission_profile: str = "endurance"
     duration_hours: float = 12.0
     ambient_temp_offset_c: float = 0.0
@@ -27,26 +28,73 @@ class WhatIfRequest(BaseModel):
     fault_severity: float = 0.0
 
 
+# Twin state snapshot cache for reproducible Monte Carlo projections (PRD Section I.5)
+twin_snapshots: Dict[str, Dict] = {}
+
+
 @router.post("/what_if")
 def run_what_if_simulation(req: WhatIfRequest):
     """
     Executes a pre-mission what-if simulation forward in time using the engine's
-    actual current Digital Twin state (health, residuals, degradation trajectory).
+    actual Digital Twin state (health, residuals, degradation trajectory).
+    Uses deterministic seeding per PRD Section I.5.
+    If snapshot_id is specified and cached, uses the exact frozen twin state for bit-exact reproducibility.
     """
-    sess = fleet_stream_manager.sessions.get(req.engine_id or fleet_stream_manager.active_engine_id)
-    cur_hi = sess.health_calc.hi_engine if sess else 0.95
-    sub_hi = sess.health_calc.hi_subsystems if sess else None
-    cur_frame = sess.current_frame if sess else None
-    cur_residuals = cur_frame.get("residuals") if cur_frame else None
-    cur_deg_state = sess.deg_mgr.get_degradation_state() if sess else None
-    wear_mult = sess.engine.wear_rate_multiplier if sess else 1.0
-    
+    engine_id = req.engine_id or fleet_stream_manager.active_engine_id or "ENG-MALE-01"
+    sess = fleet_stream_manager.sessions.get(engine_id)
+
+    # Check if this snapshot is already captured and frozen
+    if req.snapshot_id and req.snapshot_id in twin_snapshots:
+        snap = twin_snapshots[req.snapshot_id]
+        cur_hi = snap["cur_hi"]
+        sub_hi = snap["sub_hi"]
+        cur_residuals = snap["cur_residuals"]
+        cur_deg_state = snap["cur_deg_state"]
+        wear_mult = snap["wear_mult"]
+        snapshot_timestamp = snap["snapshot_timestamp"]
+        snapshot_id = req.snapshot_id
+    else:
+        # Capture a fresh snapshot from the active engine session
+        cur_hi = sess.health_calc.hi_engine if sess else 0.95
+        sub_hi = dict(sess.health_calc.hi_subsystems) if sess and sess.health_calc.hi_subsystems else None
+        cur_frame = sess.current_frame if sess else None
+        cur_residuals = dict(cur_frame["residuals"]) if cur_frame and "residuals" in cur_frame else None
+        cur_deg_state = dict(sess.deg_mgr.get_degradation_state()) if sess else None
+        wear_mult = sess.engine.wear_rate_multiplier if sess else 1.0
+
+        # Calculate twin state snapshot timestamp for operator traceability
+        sim_time_sec = cur_frame.get("timestamp", 0.0) if cur_frame else (sess.sim_time if sess else 0.0)
+        hours = int(sim_time_sec // 3600)
+        minutes = int((sim_time_sec % 3600) // 60)
+        seconds = int(sim_time_sec % 60)
+        snapshot_timestamp = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+        # Deterministic snapshot ID based on engine and exact current degradation state
+        snapshot_id = req.snapshot_id or f"{engine_id}-T{int(sim_time_sec)}-HI{round(cur_hi, 3)}"
+
+        # Freeze snapshot in cache
+        twin_snapshots[snapshot_id] = {
+            "cur_hi": cur_hi,
+            "sub_hi": sub_hi,
+            "cur_residuals": cur_residuals,
+            "cur_deg_state": cur_deg_state,
+            "wear_mult": wear_mult,
+            "snapshot_timestamp": snapshot_timestamp,
+            "sim_time_sec": sim_time_sec
+        }
+        if len(twin_snapshots) > 100:
+            oldest_key = next(iter(twin_snapshots))
+            twin_snapshots.pop(oldest_key, None)
+
     result = simulator.run_simulation(
         current_hi=cur_hi,
         current_subsystems=sub_hi,
         current_residuals=cur_residuals,
         current_deg_state=cur_deg_state,
         wear_multiplier=wear_mult,
+        engine_id=engine_id,
+        twin_snapshot_id=snapshot_id,
+        twin_snapshot_timestamp=snapshot_timestamp,
         mission_profile_name=req.mission_profile,
         planned_duration_hours=req.duration_hours,
         ambient_temp_offset_c=req.ambient_temp_offset_c,

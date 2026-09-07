@@ -9,15 +9,18 @@ export default function SimulatorView({ frame }) {
   const [faultInjection, setFaultInjection] = useState('NONE');
   const [simResult, setSimResult] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [lockSnapshot, setLockSnapshot] = useState(false);
 
-  const handleRunSimulation = async () => {
+  const handleRunSimulation = async (targetSnapshotId = null) => {
     setIsRunning(true);
     try {
+      const activeSnapshotId = targetSnapshotId || (lockSnapshot && simResult?.snapshot_id ? simResult.snapshot_id : null);
       const res = await fetch('/api/mission/what_if', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           engine_id: frame?.engine_id || 'ENG-MALE-01',
+          snapshot_id: activeSnapshotId,
           mission_profile: profile,
           duration_hours: duration,
           ambient_temp_offset_c: tempOffset,
@@ -55,7 +58,7 @@ export default function SimulatorView({ frame }) {
   const clearanceStatus = simResult?.status || simResult?.tactical_clearance?.recommendation || 'GO';
   const clearanceRationale = simResult?.recommendation || simResult?.tactical_clearance?.rationale || 'Engine cleared for scheduled profile.';
   const firingRule = simResult?.firing_rule || simResult?.tactical_clearance?.firing_rule;
-  const ensembleRuns = simResult?.ensemble_stats?.ensemble_runs || 25;
+  const ensembleRuns = simResult?.ensemble_runs || simResult?.ensemble_stats?.ensemble_runs || 25;
   const failProbs = simResult?.failure_probabilities || {};
 
   const isNoGo = clearanceStatus === 'NO_GO';
@@ -77,14 +80,33 @@ export default function SimulatorView({ frame }) {
             </p>
           </div>
 
-          <button
-            onClick={handleRunSimulation}
-            disabled={isRunning}
-            className="titan-btn titan-btn-primary"
-            style={{ padding: '0.55rem 1.25rem', fontSize: '0.85rem' }}
-          >
-            {isRunning ? 'Running simulation...' : 'Run what-if simulation'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+            {simResult?.snapshot_timestamp && (
+              <button
+                onClick={() => handleRunSimulation(simResult.snapshot_id)}
+                disabled={isRunning}
+                className="titan-btn"
+                title={`Re-run identical scenario against twin state snapshot ${simResult.snapshot_timestamp}`}
+                style={{
+                  padding: '0.55rem 0.95rem',
+                  fontSize: '0.82rem',
+                  background: 'var(--bg-base)',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-secondary)'
+                }}
+              >
+                Re-test snapshot ({simResult.snapshot_timestamp})
+              </button>
+            )}
+            <button
+              onClick={() => handleRunSimulation()}
+              disabled={isRunning}
+              className="titan-btn titan-btn-primary"
+              style={{ padding: '0.55rem 1.25rem', fontSize: '0.85rem' }}
+            >
+              {isRunning ? 'Running simulation...' : 'Run what-if simulation'}
+            </button>
+          </div>
         </div>
 
         <div className="header-accent-rule" />
@@ -175,25 +197,68 @@ export default function SimulatorView({ frame }) {
                 onChange={(e) => setAltCeiling(Number(e.target.value))}
               />
             </div>
+
+            {simResult?.snapshot_timestamp && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                fontSize: '0.73rem',
+                color: 'var(--text-secondary)',
+                background: 'var(--bg-base)',
+                padding: '0.45rem 0.65rem',
+                borderRadius: '4px',
+                border: '1px solid var(--border-color)',
+                marginTop: '0.2rem'
+              }}>
+                <input
+                  type="checkbox"
+                  id="lockSnapshotToggle"
+                  checked={lockSnapshot}
+                  onChange={(e) => setLockSnapshot(e.target.checked)}
+                  style={{ cursor: 'pointer' }}
+                />
+                <label htmlFor="lockSnapshotToggle" style={{ cursor: 'pointer', userSelect: 'none' }}>
+                  Pin twin state snapshot <strong style={{ fontFamily: 'var(--font-mono)' }}>({simResult.snapshot_timestamp})</strong> for reproducible what-if runs
+                </label>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Projected Outcome Panel (Generated on Demand) */}
         <div className="titan-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem', flexWrap: 'wrap', gap: '0.5rem' }}>
             <div>
               <h3 style={{ fontSize: '0.98rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
                 Projected mission outcome
               </h3>
               <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: '0.15rem 0 0 0' }}>
-                On-demand simulation projection
+                {simResult?.snapshot_timestamp
+                  ? `Projection based on twin state as of ${simResult.snapshot_timestamp}`
+                  : 'On-demand simulation projection'}
               </p>
             </div>
             {simResult && (
-              <StatusPill
-                status={clearanceStatus === 'GO' ? 'nominal' : clearanceStatus === 'CAUTION' ? 'caution' : 'critical'}
-                label={clearanceStatus}
-              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                {simResult.snapshot_timestamp && (
+                  <span style={{
+                    fontSize: '0.68rem',
+                    fontFamily: 'var(--font-mono)',
+                    padding: '0.15rem 0.45rem',
+                    borderRadius: '3px',
+                    background: 'var(--bg-base)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-secondary)'
+                  }}>
+                    Twin state: {simResult.snapshot_timestamp}
+                  </span>
+                )}
+                <StatusPill
+                  status={clearanceStatus === 'GO' ? 'nominal' : clearanceStatus === 'CAUTION' ? 'caution' : 'critical'}
+                  label={clearanceStatus}
+                />
+              </div>
             )}
           </div>
 
@@ -323,8 +388,24 @@ export default function SimulatorView({ frame }) {
                   )}
                 </div>
                 <div>{clearanceRationale}</div>
-                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.4rem', borderTop: '1px dashed var(--border-subtle)', paddingTop: '0.3rem' }}>
-                  Fast-time Monte Carlo: {ensembleRuns} forward trajectories sampled across physics parameter uncertainty.
+                <div style={{
+                  fontSize: '0.68rem',
+                  color: 'var(--text-muted)',
+                  marginTop: '0.4rem',
+                  borderTop: '1px dashed var(--border-subtle)',
+                  paddingTop: '0.35rem',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '0.4rem'
+                }}>
+                  <span>Fast-time Monte Carlo: {ensembleRuns} forward trajectories sampled across physics parameter uncertainty.</span>
+                  {simResult?.deterministic_seed !== undefined && (
+                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
+                      Seed: #{simResult.deterministic_seed} (Reproducible)
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
